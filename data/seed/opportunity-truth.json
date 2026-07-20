@@ -1,0 +1,286 @@
+{
+  "themes": [
+    {
+      "theme_id": "usage_based_billing",
+      "rank": 1,
+      "recommendation": "build_now",
+      "rationale": "Highest ARR-weighted demand, enterprise-concentrated, with lost deals and three competitors ahead — the Q4 anchor.",
+      "target_volume": {
+        "tickets": 120,
+        "transcripts": 22,
+        "deal_losses": 8
+      },
+      "segment_skew": "enterprise",
+      "severity_bias": 4,
+      "sentiment_bias": -1
+    },
+    {
+      "theme_id": "multi_entity_invoicing",
+      "rank": 2,
+      "recommendation": "build_next",
+      "rationale": "Low volume but top-15 enterprise, greenfield (no competitor has it), and expansion-loaded — the hidden gem.",
+      "target_volume": {
+        "tickets": 18,
+        "transcripts": 6,
+        "deal_losses": 2
+      },
+      "segment_skew": "enterprise",
+      "severity_bias": 5,
+      "sentiment_bias": -1
+    },
+    {
+      "theme_id": "dunning_customization",
+      "rank": 3,
+      "recommendation": "deprioritize",
+      "rationale": "Loudest theme by raw volume, but almost entirely cosmetic SMB asks with no enterprise blocks — the volume trap.",
+      "target_volume": {
+        "tickets": 340,
+        "transcripts": 4,
+        "deal_losses": 0
+      },
+      "segment_skew": "smb",
+      "severity_bias": 2,
+      "sentiment_bias": 0
+    },
+    {
+      "theme_id": "latam_tax",
+      "rank": 4,
+      "recommendation": "watch",
+      "rationale": "Growing signal across segments; not yet urgent — revisit in Q1.",
+      "target_volume": {
+        "tickets": 45,
+        "transcripts": 12,
+        "deal_losses": 1
+      },
+      "segment_skew": "mixed",
+      "severity_bias": 3,
+      "sentiment_bias": -1
+    },
+    {
+      "theme_id": "hybrid_revrec",
+      "rank": 5,
+      "recommendation": "watch",
+      "rationale": "Steady mid-market interest; monitor, no immediate action.",
+      "target_volume": {
+        "tickets": 28,
+        "transcripts": 8,
+        "deal_losses": 0
+      },
+      "segment_skew": "mid_market",
+      "severity_bias": 3,
+      "sentiment_bias": 0
+    },
+    {
+      "theme_id": "webhook_reliability",
+      "rank": 6,
+      "recommendation": "deprioritize",
+      "rationale": "High ticket volume but operational, not strategic; no ARR or deals at stake.",
+      "target_volume": {
+        "tickets": 210,
+        "transcripts": 5,
+        "deal_losses": 0
+      },
+      "segment_skew": "mixed",
+      "severity_bias": 2,
+      "sentiment_bias": 0
+    },
+    {
+      "theme_id": "salesforce_sync",
+      "rank": 7,
+      "recommendation": "watch",
+      "rationale": "Fewer but higher-stakes mid-market asks, including blocked deals — watch closely.",
+      "target_volume": {
+        "tickets": 15,
+        "transcripts": 4,
+        "deal_losses": 3
+      },
+      "segment_skew": "mid_market",
+      "severity_bias": 3,
+      "sentiment_bias": -1
+    },
+    {
+      "theme_id": "custom_invoice_pdf",
+      "rank": 8,
+      "recommendation": "deprioritize",
+      "rationale": "High-volume cosmetic SMB requests; backlog.",
+      "target_volume": {
+        "tickets": 180,
+        "transcripts": 2,
+        "deal_losses": 0
+      },
+      "segment_skew": "smb",
+      "severity_bias": 2,
+      "sentiment_bias": 0
+    }
+  ],
+  "planted_accounts": [
+    {
+      "theme_id": "usage_based_billing",
+      "account_name": "Retool",
+      "role": "blocked_deal",
+      "severity": 5
+    },
+    {
+      "theme_id": "usage_based_billing",
+      "account_name": "Cursor",
+      "role": "top_requester",
+      "severity": 5
+    },
+    {
+      "theme_id": "usage_based_billing",
+      "account_name": "Notion",
+      "role": "top_requester",
+      "severity": 4
+    },
+    {
+      "theme_id": "usage_based_billing",
+      "account_name": "Vercel",
+      "role": "top_requester",
+      "severity": 4
+    },
+    {
+      "theme_id": "usage_based_billing",
+      "account_name": "Linear",
+      "role": "top_requester",
+      "severity": 4
+    },
+    {
+      "theme_id": "usage_based_billing",
+      "account_name": "Loom",
+      "role": "top_requester",
+      "severity": 3
+    },
+    {
+      "theme_id": "usage_based_billing",
+      "account_name": "Bland",
+      "role": "top_requester",
+      "severity": 4
+    },
+    {
+      "theme_id": "usage_based_billing",
+      "account_name": "Statsig",
+      "role": "top_requester",
+      "severity": 4
+    },
+    {
+      "theme_id": "usage_based_billing",
+      "account_name": "Steep",
+      "role": "top_requester",
+      "severity": 3
+    },
+    {
+      "theme_id": "multi_entity_invoicing",
+      "account_name": "Framer",
+      "role": "top_requester",
+      "severity": 5
+    },
+    {
+      "theme_id": "multi_entity_invoicing",
+      "account_name": "Airtable",
+      "role": "blocked_deal",
+      "severity": 5
+    },
+    {
+      "theme_id": "multi_entity_invoicing",
+      "account_name": "Notion",
+      "role": "top_requester",
+      "severity": 4
+    },
+    {
+      "theme_id": "multi_entity_invoicing",
+      "account_name": "Descript",
+      "role": "top_requester",
+      "severity": 4
+    },
+    {
+      "theme_id": "multi_entity_invoicing",
+      "account_name": "Miro",
+      "role": "top_requester",
+      "severity": 4
+    },
+    {
+      "theme_id": "multi_entity_invoicing",
+      "account_name": "Pitch",
+      "role": "top_requester",
+      "severity": 3
+    },
+    {
+      "theme_id": "dunning_customization",
+      "account_name": "Loom",
+      "role": "passing_mention",
+      "severity": 2
+    },
+    {
+      "theme_id": "dunning_customization",
+      "account_name": "Arc",
+      "role": "passing_mention",
+      "severity": 2
+    },
+    {
+      "theme_id": "dunning_customization",
+      "account_name": "Reflect",
+      "role": "passing_mention",
+      "severity": 1
+    },
+    {
+      "theme_id": "latam_tax",
+      "account_name": "Descript",
+      "role": "top_requester",
+      "severity": 4
+    },
+    {
+      "theme_id": "latam_tax",
+      "account_name": "Riverside",
+      "role": "top_requester",
+      "severity": 3
+    },
+    {
+      "theme_id": "latam_tax",
+      "account_name": "Krisp",
+      "role": "top_requester",
+      "severity": 3
+    },
+    {
+      "theme_id": "salesforce_sync",
+      "account_name": "Attio",
+      "role": "blocked_deal",
+      "severity": 5
+    },
+    {
+      "theme_id": "salesforce_sync",
+      "account_name": "Fathom",
+      "role": "top_requester",
+      "severity": 4
+    },
+    {
+      "theme_id": "salesforce_sync",
+      "account_name": "Front",
+      "role": "top_requester",
+      "severity": 4
+    },
+    {
+      "theme_id": "salesforce_sync",
+      "account_name": "Pilot",
+      "role": "blocked_deal",
+      "severity": 4
+    },
+    {
+      "theme_id": "hybrid_revrec",
+      "account_name": "Airtable",
+      "role": "top_requester",
+      "severity": 3
+    },
+    {
+      "theme_id": "hybrid_revrec",
+      "account_name": "Pilot",
+      "role": "top_requester",
+      "severity": 3
+    },
+    {
+      "theme_id": "hybrid_revrec",
+      "account_name": "Levels",
+      "role": "top_requester",
+      "severity": 3
+    }
+  ]
+}

@@ -1,0 +1,66 @@
+[
+  {
+    "id": "usage_based_billing",
+    "name": "Usage-based billing enhancements",
+    "short_description": "Real-time metering, custom aggregation, and tiered/prepaid pricing for consumption-based revenue.",
+    "category": "billing",
+    "first_seen_at": "2026-02-03",
+    "last_seen_at": "2026-07-17"
+  },
+  {
+    "id": "multi_entity_invoicing",
+    "name": "Multi-entity consolidated invoicing",
+    "short_description": "Consolidated invoicing and per-entity breakdowns for customers with multiple legal entities.",
+    "category": "invoicing",
+    "first_seen_at": "2026-03-11",
+    "last_seen_at": "2026-07-14"
+  },
+  {
+    "id": "dunning_customization",
+    "name": "Dunning email customization",
+    "short_description": "Customizable dunning emails — branding, tone, and workflow branching for failed payments.",
+    "category": "billing",
+    "first_seen_at": "2026-01-20",
+    "last_seen_at": "2026-07-18"
+  },
+  {
+    "id": "latam_tax",
+    "name": "LATAM tax handling",
+    "short_description": "Tax compliance and e-invoicing for Brazil, Mexico, Argentina, and Colombia.",
+    "category": "tax",
+    "first_seen_at": "2026-04-02",
+    "last_seen_at": "2026-07-15"
+  },
+  {
+    "id": "hybrid_revrec",
+    "name": "Hybrid contract revenue recognition",
+    "short_description": "Revenue recognition for hybrid subscription-plus-usage contracts under ASC 606.",
+    "category": "revrec",
+    "first_seen_at": "2026-02-18",
+    "last_seen_at": "2026-07-09"
+  },
+  {
+    "id": "webhook_reliability",
+    "name": "Webhook reliability",
+    "short_description": "Reliable webhook delivery with retries and an observability dashboard.",
+    "category": "integrations",
+    "first_seen_at": "2026-01-22",
+    "last_seen_at": "2026-07-16"
+  },
+  {
+    "id": "salesforce_sync",
+    "name": "Native Salesforce sync",
+    "short_description": "Native, bi-directional Salesforce integration.",
+    "category": "integrations",
+    "first_seen_at": "2026-03-05",
+    "last_seen_at": "2026-07-12"
+  },
+  {
+    "id": "custom_invoice_pdf",
+    "name": "Custom invoice PDF templates",
+    "short_description": "Custom invoice PDF templates, multi-language invoicing, and custom line-item groupings.",
+    "category": "invoicing",
+    "first_seen_at": "2026-01-28",
+    "last_seen_at": "2026-07-13"
+  }
+]
