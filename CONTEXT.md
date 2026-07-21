@@ -227,7 +227,7 @@ Plus bonus category: best OLTP+OLAP integration (€1000).
 ## 9. WHAT TO DO RIGHT NOW (updated 2026-07-20, evening)
 **PHASE A1 IS FULLY COMPLETE as of this update.** `db:init`, `seed:load`, `seed:dry`, and `seed:generate` all done and verified against live Postgres (956 tickets / 63 transcripts / 14 deals, $1.22 total cost). See §5 for full detail, including the provider saga (Anthropic → xAI → Groq → back to Anthropic with a topped-up key) and the real spot-check results. All of Phase A2 (extraction) and all four Phase A3 query functions were also written and typechecked while generation was blocked on billing issues — see §5's "verification debt" note for what's typechecked-only vs. runtime-verified.
 
-**Immediate next action:** Phase A2 — set up the Trigger.dev Cloud project, then run extraction to populate ClickHouse `mentions`.
+**Immediate next action:** Phase A2 — Trigger.dev Cloud project is set up and its key verified (see §10 item 1). Start a local worker (`npx trigger.dev@latest dev`) and run extraction to populate ClickHouse `mentions`.
 
 ## 10. SINGLE-OWNER STATUS (updated 2026-07-20, night — Phase A1 complete)
 
@@ -239,7 +239,7 @@ Plus bonus category: best OLTP+OLAP integration (€1000).
 - Everything written this session (extraction pipeline, all 4 query functions, competitor mapping, multi-provider LLM support) is committed to `main` on GitHub and does NOT depend on any particular session staying alive — safe to pick up from a fresh environment.
 
 ### The sequential plan from here
-1. **Set up the Trigger.dev Cloud project** (account, `TRIGGER_PROJECT_REF`, `TRIGGER_SECRET_KEY` into `.env.local`) — a dashboard/auth task, needs a human. This is now the single biggest blocker to running extraction and the agent for real.
+1. [x] **Trigger.dev Cloud project set up.** `TRIGGER_PROJECT_REF`/`TRIGGER_SECRET_KEY` are in `.env.local`, validated against the real API (`POST /api/v1/tasks/{id}/trigger` returned `200` + a run id, not an auth error). No worker/dev-server is running yet, so that validation call sits as a queued (will-error, empty-payload) run in the dashboard — harmless, ignore it. **Next: run `npx trigger.dev@latest dev` to start a local worker, then trigger `extractAllMentions` for real.**
 2. **Run extraction** (`trigger/extract-mentions.ts` via `npx trigger.dev@latest dev`, or call `lib/extraction/pipeline.ts`'s functions directly from a script first to unblock faster if the Trigger.dev dev server setup is slow) → populates ClickHouse `mentions` (~5,000 rows expected).
 3. **Verify the 4 query functions against real data** — run `listOpportunitiesRanked`, `getThemeEvidence`, `getImpactProjection`, `getThemeVolumeStats`/`getSignalSummary`/`getThemeTrends` and actually look at the output. **The scoring formula (§5 Phase A3 item 3) was implemented but explicitly deferred for review against real numbers — do that review now**, before treating any `build_now`/`build_next`/`deprioritize` call as final. Check it reproduces the demo narrative (§1): usage-billing #1, multi-entity hidden gem, dunning correctly deprioritized despite volume.
 4. **Build `createAgentStream()`** (`lib/agent-stream.ts`) and **`chat.agent()`** (`trigger/agent.ts`) against the now-verified query functions. Hybrid orchestration per §2's decision (scripted main flow, LLM-driven follow-ups). Honor the per-chapter event order in §3.
