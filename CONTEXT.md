@@ -190,15 +190,19 @@ Three are **frontend-shaped** — transforms in `lib/queries/transforms.ts` (`to
 5. [x] `docs/architecture.md` with Mermaid OLTP+OLAP diagram
 
 ### Phase A5 — Deploy + submit ⏳ PARTIAL
-1. [ ] `npx trigger.dev@4.5.5 deploy` — **FAILED** with `Failed to get deployment image ref` (retry from local/dashboard still needed). Vercel env already mirrored.
+1. [x] `npx trigger.dev@4.5.5 deploy` — **SUCCEEDED** 2026-07-21 as version `20260721.1` (6 tasks). Cloud smoke: `stream-meridian-answer` → 6 chapters / COMPLETED / correct prioritize headline (`CLOUD VERIFY OK`).
 2. [x] `SUBMISSION.md` updated with real verified counts
 3. [ ] Demo video — **user records** (open on live product, max 5 min)
 4. [x] MIT `LICENSE`; `README.md` rewritten (was 2-line placeholder)
 5. [x] Repo is **public** on GitHub (`sauravhippargi/meridian`)
 6. [ ] Hackathon submission form — user
-7. [ ] Flip `NEXT_PUBLIC_AGENT_MODE=live` on Vercel + local for recording
+7. [ ] Flip `NEXT_PUBLIC_AGENT_MODE=live` on **Vercel** (teammate-owned project) + confirm local already `live` for recording
 
 **Process rule (ongoing):** Keep updating this CONTEXT.md after each verified milestone and commit it with related work — do not let it drift.
+
+**Hosting ownership (important):**
+- **Vercel project is on the teammate's account** (production URL: `https://meridian-mu-beryl.vercel.app`). Sparsh (repo owner) cannot flip Production env vars there — teammate must set them.
+- **Trigger.dev Cloud** is on Sparsh's account (`proj_itrmpnqxuhbpcqlwtorl`). Sparsh owns Trigger deploy + Trigger dashboard env.
 
 ---
 
@@ -227,15 +231,15 @@ Plus bonus category: best OLTP+OLAP integration (€1000).
 
 ---
 
-## 9. WHAT'S LEFT (updated 2026-07-20 night — post verification)
+## 9. WHAT'S LEFT (updated 2026-07-21 — post Trigger Cloud deploy)
 
-Phases A1–A4 + live extraction + agent E2E are **done**. Only submit/demo path remains.
+Phases A1–A4 + live extraction + agent E2E + **Trigger Cloud deploy** are **done**. Remaining = Vercel live flip + demo + form.
 
 ### Must do before submit
-1. **Retry Trigger Cloud deploy** — `npx trigger.dev@4.5.5 deploy` last failed: `Failed to get deployment image ref`
-2. **Set `NEXT_PUBLIC_AGENT_MODE=live`** on Vercel + local (still `mock` by default / unset in `.env.local`)
-3. **Record demo video** — open on live product, ≤5 min, land three wow moments
-4. **Hackathon submission form** — morning July 23 preferred (deadline midnight AoE July 23)
+1. [x] **Trigger Cloud deploy** — version `20260721.1` live; cloud stream verify OK
+2. [ ] **Teammate: set Vercel env → live** — especially `NEXT_PUBLIC_AGENT_MODE=live`, then **Redeploy Production** (Vercel is teammate-owned; Sparsh cannot do this)
+3. [ ] **Record demo video** — open on live product (`https://meridian-mu-beryl.vercel.app`), ≤5 min, land three wow moments
+4. [ ] **Hackathon submission form** — morning July 23 preferred (deadline midnight AoE July 23)
 
 ### Optional / nice-to-have (not blocking demo narrative)
 - LATAM `watch` threshold — currently signal 23 → `deprioritize` (needs ≥35); only tune if you want narrative item #4 as `watch`
@@ -244,21 +248,26 @@ Phases A1–A4 + live extraction + agent E2E are **done**. Only submit/demo path
 
 Repo is already **public**. Do not change scoring code unless user asks.
 
-## 10. SINGLE-OWNER STATUS (updated 2026-07-20 night)
+## 10. OWNERSHIP & STATUS (updated 2026-07-21)
 
-One owner (Sparsh). **Keep CONTEXT.md updated after every verified milestone** (process rule going forward).
+- **Sparsh (repo / Trigger / data):** Trigger Cloud deploy ✅; Trigger dashboard env; local `.env.local`; demo video + hackathon form (or share with teammate).
+- **Teammate (Vercel account):** Production project at `https://meridian-mu-beryl.vercel.app` — must add/update env vars and Redeploy so `NEXT_PUBLIC_AGENT_MODE=live` is baked into the build.
+
+**Keep CONTEXT.md updated after every verified milestone** (process rule going forward).
 
 ### Verified facts
 - Postgres: 123 accounts / 956 tickets / 63 transcripts / 14 deals (11 lost) — re-counted live
 - ClickHouse: **1,802 mentions** (dunning 582) — re-counted live; ~97% source coverage after backfill
-- Trigger.dev: **v4.5.5**; local `dev` worker used for extraction; Cloud **deploy still failing** on image-ref
+- Trigger.dev: **v4.5.5**; Cloud deploy **`20260721.1`** ✅; `stream-meridian-answer` cloud smoke OK (6 chapters)
 - Scoring: **`build_next ≥53`** (commit `fd71349`) — usage #1 build_now / multi #2 build_next / dunning deprioritize
-- Agent E2E passed (`scripts/e2e-live-stream.ts`); in-process path works even if Trigger stream deploy is down
+- Agent E2E passed (`scripts/e2e-live-stream.ts`); Trigger path preferred, in-process fallback remains
 - A4 sync + architecture docs on main; A5 LICENSE/README/SUBMISSION on main
+- **Vercel owned by teammate** — live flip is their action item
 
 ### Recent commits on main
 - `9ab9f37` — Trigger v4 + extraction smoke
 - `fd71349` — build_next ≥53 + agent stream
 - `9550c7d` — sync, architecture, LICENSE, SUBMISSION, E2E script
 - `b46430d` — CONTEXT.md A2–A5 progress sync
+- `1d15231` — CONTEXT.md verified counts + remaining work
 
