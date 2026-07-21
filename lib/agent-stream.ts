@@ -1,28 +1,33 @@
+import { tasks } from '@trigger.dev/sdk';
 import type { ChatRequest, StreamEvent } from '@/types/chapter';
+import { runAgentFlow } from '@/lib/agent/prioritize-flow';
+import { chapterEvents } from '@/trigger/streams';
 
 // ─────────────────────────────────────────────────────────────────────────────
-// THE LIVE SEAM — Person A implements this generator's body.
+// THE LIVE SEAM — yields typed StreamEvents for route.ts → NDJSON.
 //
-// route.ts calls createAgentStream(body) when NEXT_PUBLIC_AGENT_MODE==='live'
-// and serializes whatever it yields as NDJSON — no reshaping on the frontend
-// side. Your only job: trigger the chat.agent() run and `yield` StreamEvents as
-// they arrive, in the ordering the mock demonstrates:
-//
-//   message_start
-//   status(running) → status(done)        // one pair per tool call / query
-//   chapter_start → chapter_intro_delta*   // deltas are word/token chunks
-//     → chapter_visual → chapter_callout*  // visual.data = tool output as-is
-//   message_end (headline)
-//
-// Contract shape chosen: an async generator (AsyncIterable<StreamEvent>). You
-// yield typed events; I own NDJSON encoding + HTTP framing (see ndjson.ts). If
-// Trigger.dev realtime gives you a ReadableStream instead, wrap it in a
-// `for await` here and yield — the signature below is the only thing route.ts
-// depends on. See INTEGRATION.md §3–§4 and app/api/chat/mock/stream.ts.
+// Prefer Trigger.dev task `stream-meridian-answer` (pipes chapter-events stream)
+// so live answers run on the Trigger worker. Falls back to in-process
+// runAgentFlow when TRIGGER_SECRET_KEY is missing (local without worker).
+// chat.agent() lives in trigger/agent.ts and shares the same runAgentFlow.
 // ─────────────────────────────────────────────────────────────────────────────
+
 export async function* createAgentStream(body: ChatRequest): AsyncGenerator<StreamEvent> {
-  void body;
-  throw new Error(
-    'Live agent stream not implemented. Person A: trigger chat.agent() and yield StreamEvents here.',
-  );
+  if (!process.env.TRIGGER_SECRET_KEY) {
+    yield* runAgentFlow(body);
+    return;
+  }
+
+  try {
+    const handle = await tasks.trigger('stream-meridian-answer', body);
+    const stream = await chapterEvents.read(handle.id, { timeoutInSeconds: 180 });
+    for await (const event of stream) {
+      yield event;
+    }
+  } catch (err) {
+    // Worker down / stream unavailable — still serve the answer in-process so
+    // the live demo doesn't hard-fail. Log for operators.
+    console.error('[createAgentStream] Trigger path failed, falling back in-process:', err);
+    yield* runAgentFlow(body);
+  }
 }

@@ -93,7 +93,9 @@ export const deriveRecommendation = (
   isGrowingRecency: boolean,
 ): OpportunityRow['recommendation'] => {
   if (hasLostDeal && signalStrength >= 70) return 'build_now';
-  if (signalStrength >= 55 && (competitiveStatus === 'greenfield' || nEnterpriseAccounts >= 3)) return 'build_next';
+  // build_next floor is 53 (was 55) — multi_entity lands at ~53 on live data
+  // with greenfield + enterprise density; 55 left it incorrectly deprioritized.
+  if (signalStrength >= 53 && (competitiveStatus === 'greenfield' || nEnterpriseAccounts >= 3)) return 'build_next';
   if (signalStrength >= 35 && isGrowingRecency) return 'watch';
   return 'deprioritize';
 };

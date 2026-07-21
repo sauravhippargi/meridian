@@ -76,10 +76,13 @@ export const extractAllMentions = task({
     ];
 
     // batchTrigger accepts chunks; Trigger Cloud caps batch size — chunk at 500.
+    // TTL 1h so the concurrency-6 queue can drain ~1k LLM calls without expiry.
     const BATCH = 500;
     for (let i = 0; i < payloads.length; i += BATCH) {
       const chunk = payloads.slice(i, i + BATCH);
-      await extractMentionsForSource.batchTrigger(chunk.map((payload) => ({ payload })));
+      await extractMentionsForSource.batchTrigger(
+        chunk.map((payload) => ({ payload, options: { ttl: '1h' } })),
+      );
     }
     return { triggered: payloads.length };
   },
