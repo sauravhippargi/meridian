@@ -15,11 +15,21 @@ let pool: Pool | null = null;
 
 export const postgres = (): Pool => {
   if (!pool) {
-    const connectionString = process.env.POSTGRES_URL;
-    if (!connectionString) {
+    const raw = process.env.POSTGRES_URL;
+    if (!raw) {
       throw new Error('POSTGRES_URL is not set — copy .env.example to .env.local');
     }
-    pool = new Pool({ connectionString });
+    // ClickHouse-managed Postgres (like most hosted PG) serves a TLS cert that
+    // doesn't chain to a public CA. Newer `pg` treats sslmode=require as
+    // verify-full AND that URL param overrides an explicit ssl option — so it
+    // rejects the cert no matter what. Strip sslmode from the URL and set TLS
+    // behavior ourselves: require TLS but skip CA verification (sslmode=disable
+    // opts back into local plaintext).
+    const u = new URL(raw);
+    const sslmode = u.searchParams.get('sslmode');
+    u.searchParams.delete('sslmode');
+    const ssl = sslmode === 'disable' ? false : { rejectUnauthorized: false };
+    pool = new Pool({ connectionString: u.toString(), ssl });
   }
   return pool;
 };

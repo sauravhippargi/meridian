@@ -6,7 +6,7 @@ import { postgres, withTransaction } from '../lib/db/postgres';
 import { loadArtifacts } from './seed/artifacts';
 import { loadSeeds } from './seed/load-seeds';
 import { buildPlan, type PlanItem, type PlanSource, type SeedAccount, type SeedTheme, type Segment } from './seed/plan';
-import { getModel, CostTracker } from './seed/llm';
+import { getModel, getModelName, CostTracker } from './seed/llm';
 import {
   generateTicket,
   generateTranscript,
@@ -68,8 +68,8 @@ const parseArgs = (argv: string[]): Flags => {
 
 // Read reference data back from Postgres (real IDs, post --load-seeds).
 const readAccounts = async (): Promise<SeedAccount[]> => {
-  const { rows } = await postgres().query<{ id: string; name: string; segment: Segment; arr: number; industry: string }>(
-    'SELECT id, name, segment, arr, industry FROM accounts',
+  const { rows } = await postgres().query<SeedAccount>(
+    'SELECT id, name, segment, arr, industry, primary_contact_name, primary_contact_role FROM accounts',
   );
   return rows;
 };
@@ -84,14 +84,18 @@ const readCompetitorIds = async (): Promise<string[]> => {
   return rows.map((r) => r.id);
 };
 
-// Fan out generation at p-limit(5), logging progress + running cost.
+// In-flight LLM calls. Kept low (default 2) for the Gemini free-tier 30 RPM wall;
+// the global pace-gate in llm.ts is what actually caps the request rate.
+const CONCURRENCY = Number(process.env.GEN_CONCURRENCY ?? 2);
+
+// Fan out generation at p-limit(CONCURRENCY), logging progress + running cost.
 const generateGroup = async <T>(
   label: string,
   items: PlanItem[],
   gen: (item: PlanItem, seq: number) => Promise<T>,
   cost: CostTracker,
 ): Promise<T[]> => {
-  const limit = pLimit(5);
+  const limit = pLimit(CONCURRENCY);
   const total = items.length;
   let done = 0;
   return Promise.all(
@@ -141,10 +145,26 @@ const persist = async (tickets: TicketRow[], transcripts: TranscriptRow[], deals
 };
 
 const runDryRun = async (plan: PlanItem[], ctx: GenContext, competitorIds: string[]): Promise<void> => {
-  const take = (source: PlanSource, n: number): PlanItem[] => plan.filter((p) => p.source === source).slice(0, n);
-  const tickets = await Promise.all(take('tickets', 5).map((item, i) => generateTicket(ctx, item, i + 1)));
-  const transcripts = await Promise.all(take('transcripts', 5).map((item, i) => generateTranscript(ctx, item, i + 1)));
-  const deals = await Promise.all(take('deals', 5).map((item, i) => generateDeal(ctx, item, i + 1, competitorIds)));
+  // Sample ACROSS themes (one item per theme, capped) rather than the first-N of
+  // a theme-ordered plan — otherwise every sample is the same (loudest) theme and
+  // the quality gate can't see dunning/multi-entity/latam output.
+  const take = (source: PlanSource, cap: number): PlanItem[] => {
+    const byTheme = new Map<string, PlanItem>();
+    for (const p of plan) {
+      if (p.source === source && !byTheme.has(p.theme.id)) byTheme.set(p.theme.id, p);
+      if (byTheme.size >= cap) break;
+    }
+    return [...byTheme.values()];
+  };
+  // Serialize samples (limit 1) so that against a tight free-tier window a single
+  // 429 backs off and recovers on its own, instead of many concurrent calls all
+  // exhausting their retry budgets at once.
+  const dryLimit = pLimit(1);
+  const run = <T>(items: PlanItem[], gen: (item: PlanItem, seq: number) => Promise<T>): Promise<T[]> =>
+    Promise.all(items.map((item, i) => dryLimit(() => gen(item, i + 1))));
+  const tickets = await run(take('tickets', 6), (item, seq) => generateTicket(ctx, item, seq));
+  const transcripts = await run(take('transcripts', 6), (item, seq) => generateTranscript(ctx, item, seq));
+  const deals = await run(take('deals', 5), (item, seq) => generateDeal(ctx, item, seq, competitorIds));
 
   console.log('=== DRY RUN — sample raw_tickets rows ===');
   console.log(JSON.stringify(tickets, null, 2));
@@ -166,8 +186,7 @@ const runGenerate = async (flags: Flags): Promise<void> => {
   let plan = buildPlan(artifacts.truth, accounts, themesById);
   if (flags.source !== 'all') plan = plan.filter((p) => p.source === flags.source);
 
-  const modelName = process.env.GEN_MODEL ?? (process.env.GEN_PROVIDER === 'google' ? 'gemini-2.0-flash' : 'gpt-4o-mini');
-  const ctx: GenContext = { model: getModel(), cost: new CostTracker(modelName) };
+  const ctx: GenContext = { model: getModel(), cost: new CostTracker(getModelName()) };
 
   if (flags.dryRun) {
     await runDryRun(plan, ctx, competitorIds);

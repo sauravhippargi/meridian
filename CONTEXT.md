@@ -132,19 +132,21 @@ All Phase A1 files written and typecheck clean. NOT YET RUN against live service
 
 ## 5. IMMEDIATE NEXT STEPS (in order)
 
-### Step 0 — Switch generator from OpenAI to Gemini (code change, do first)
-- Update `scripts/seed/llm.ts` (and anywhere else) to use `@ai-sdk/google` with `GOOGLE_GENERATIVE_AI_API_KEY`.
-- Model: `gemini-2.0-flash-lite` or `gemini-2.5-flash-lite` for generation (30 RPM).
-- LOWER concurrency from 5 to 2-3. Add 429-retry with exponential backoff.
-- Update `.env.example` to document `GOOGLE_GENERATIVE_AI_API_KEY` (shared file — heads-up to Person B).
+### Step 0 — Switch generator from OpenAI to Gemini ✅ DONE
+- [x] `scripts/seed/llm.ts` now defaults to `@ai-sdk/google` + `gemini-2.0-flash-lite` (env-overridable via `GEN_PROVIDER`/`GEN_MODEL`). Single `getModelName()` source of truth.
+- [x] Concurrency lowered 5→2 (`GEN_CONCURRENCY`, default 2). Added a **global RPM pace-gate** (`GEN_MIN_INTERVAL_MS`, default 2100ms ≈ 28/min) — caps the request *rate*, not just in-flight count.
+- [x] `withRetry` upgraded to **429-aware backoff** (5→60s for rate limits, 1→4s for transient) with jitter.
+- [x] `.env.example` documents `GOOGLE_GENERATIVE_AI_API_KEY` + generation tuning knobs; OpenAI/Anthropic marked optional.
+- **Two infra fixes discovered while running (both flagged to Person A):**
+  - [x] `lib/db/postgres.ts` — newer `pg` treats `sslmode=require` as verify-full and rejects ClickHouse-managed Postgres's cert; now strips `sslmode` from the URL and sets `ssl:{rejectUnauthorized:false}` (honors `sslmode=disable`).
+  - [x] `scripts/init-schema.ts` — ClickHouse statement splitter now strips `--` line comments before splitting on `;` (a comment contained a semicolon → "Empty query").
 
 ### Step 1 — Run the data pipeline (finishes Phase A1)
-Sequence (confirm before each service-touching command):
-1. `npm run db:init` — creates ClickHouse DB `meridian` + applies both schemas
-2. `npm run seed:load` — loads 123 accounts / 8 themes / 8 competitors into Postgres
-3. `npm run seed:dry` — generates 5 samples/source as JSON. **QUALITY GATE: read all samples. Do tickets sound like real B2B SaaS customers? Is a Retool usage-billing ticket actually about usage billing?** Do NOT proceed until samples look good — you get ~1 full run/day on the free tier.
-4. `npm run seed:generate` — full ~1,033-call run (~60-90 min wall clock due to rate limits)
-5. Verify: query mentions count, spot-check 20, confirm distribution roughly matches truth.
+1. [x] `npm run db:init` — ✅ Postgres (6 tables/3 triggers/4 enums) + ClickHouse `meridian` DB (mentions + theme_scores_daily MV) applied.
+2. [x] `npm run seed:load` — ✅ 123 accounts / 8 themes / 8 competitors in Postgres.
+3. [x] `npm run seed:dry` — ✅ **PASSED quality gate.** Switched generation provider to **Anthropic Claude Haiku 4.5** (`GEN_PROVIDER=anthropic`) — Gemini free tier surfaced `limit: 20`, too low for the run; the paid Anthropic key is reliable. Cross-theme samples: 8 themes represented, diverse interviewee names (contact-seeded), theme-appropriate severity, all planted blocked-deals (Retool→usage, Airtable→multi-entity, Attio→salesforce, Slite→latam) landed. ~$0.02 / 17 samples.
+4. [ ] `npm run seed:generate` — full ~1,033-call run. On Anthropic @ ~50/min ≈ **20–30 min, ~$1–2**. No longer one-shot-per-day (paid quota), so re-runnable if needed. **AWAITING USER GO.**
+5. [ ] Verify: mentions count, spot-check 20, distribution matches truth.
 
 ### Phase A2 — Extraction pipeline (~3-4 hrs)
 1. Write extraction prompt in `lib/extraction/prompts.ts` — takes a ticket/transcript, returns `Mention[]` (theme from closed-set taxonomy, severity 1-5, sentiment, verbatim quote, char offsets).

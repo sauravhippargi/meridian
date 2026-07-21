@@ -81,9 +81,11 @@ Write a concrete support ticket: a specific subject line and a 2–4 sentence bo
   };
 };
 
+// Only the transcript prose comes from the LLM — the interviewee identity is the
+// account's real seeded contact, so names stay diverse and traceable (the LLM
+// left to itself defaults everyone to "Sarah Chen", which wrecks the evidence-card
+// provenance moment).
 const TranscriptGen = z.object({
-  interviewee_name: z.string(),
-  interviewee_role: z.string(),
   transcript: z.string(),
 });
 
@@ -94,9 +96,10 @@ export const generateTranscript = async (ctx: GenContext, item: PlanItem, seq: n
       : '';
   const prompt = `Simulate an excerpt from a 30–60 minute customer discovery interview for Meridian Payments (a Stripe competitor).
 Account: ${item.account.name} (${item.account.industry}, ${item.account.segment}).
+Interviewee: ${item.account.primary_contact_name}, ${item.account.primary_contact_role} at ${item.account.name}.
 Theme under discussion: ${item.theme.name} — ${item.theme.short_description}.
 Severity/urgency (1–5): ${item.severity}. ${churnLine}
-Return the interviewee's name, their role/title, and a realistic multi-paragraph transcript excerpt in their own first-person voice discussing this theme. Do not mention that this is simulated.`;
+Return a realistic multi-paragraph transcript excerpt in ${item.account.primary_contact_name}'s own first-person voice discussing this theme. Do not restate their name or title; do not mention that this is simulated.`;
   const { object, usage } = await withRetry(
     () => generateObject({ model: ctx.model, schema: TranscriptGen, prompt }),
     `transcript ${seq}`,
@@ -107,8 +110,8 @@ Return the interviewee's name, their role/title, and a realistic multi-paragraph
     external_id: `INT-${String(seq).padStart(4, '0')}`,
     account_id: item.account.id,
     title: `${item.account.name} — ${item.theme.name} discovery`,
-    interviewee_name: object.interviewee_name,
-    interviewee_role: object.interviewee_role,
+    interviewee_name: item.account.primary_contact_name,
+    interviewee_role: item.account.primary_contact_role,
     interview_date: isoDate(randomWithinDays(180)),
     duration_minutes: 30 + Math.floor(Math.random() * 31), // 30–60
     transcript: object.transcript,

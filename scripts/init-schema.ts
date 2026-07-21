@@ -68,9 +68,17 @@ const main = async (): Promise<void> => {
   await bootstrap.close();
 
   console.log('Applying schema.clickhouse.sql…');
-  // Safe to split on ';' — the ClickHouse file has no dollar-quoting or inner
-  // semicolons (unlike the Postgres file, which is why that one runs whole).
+  // Strip `--` line comments BEFORE splitting on ';' — comment prose can contain
+  // semicolons, which would otherwise split mid-comment and yield comment-only
+  // chunks that ClickHouse rejects as "Empty query". DDL here never uses `--`
+  // inside a string literal, so line-wise stripping is safe.
   const statements = chSql
+    .split('\n')
+    .map((line) => {
+      const i = line.indexOf('--');
+      return i >= 0 ? line.slice(0, i) : line;
+    })
+    .join('\n')
     .split(';')
     .map((s) => s.trim())
     .filter((s) => s.length > 0);

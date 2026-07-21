@@ -11,6 +11,8 @@ export interface SeedAccount {
   segment: Segment;
   arr: number;
   industry: string;
+  primary_contact_name: string;
+  primary_contact_role: string;
 }
 export interface SeedTheme {
   id: string;
