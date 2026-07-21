@@ -217,5 +217,30 @@ Plus bonus category: best OLTP+OLAP integration (€1000).
 
 ---
 
-## 9. WHAT TO DO RIGHT NOW
-ClickHouse ping returns `Ok.`, env is set, Phase A1 code + seed artifacts are committed. The immediate next action is **Step 0** (switch generator to Gemini + lower concurrency), then **Step 1** (run db:init → seed:load → seed:dry → review → seed:generate). Everything is staged for this.
+## 9. WHAT TO DO RIGHT NOW (updated 2026-07-20, evening)
+Step 0 and Step 1.1-1.3 are done (db:init, seed:load, seed:dry all passed — see §5). **`npm run seed:generate` is running in the background right now** (started ~18:44, Anthropic Claude Haiku 4.5, ~38% through as of this update, ETA ~55-65 min total from start). While it runs, all of Phase A2 (extraction) and all four Phase A3 query functions were written and typechecked — see §5 for the full breakdown and the explicit "verification debt" list of what's typechecked-only vs. runtime-verified against live data.
+
+**The moment generation finishes:** verify raw counts in Postgres (`SELECT count(*) FROM raw_tickets` etc. — expect ~956/63/14), then move to extraction (§5 Phase A2 step 5). Everything needed to do that is already written.
+
+## 10. PARALLEL WORK PLAN — what Person A and Person B can each do RIGHT NOW
+
+The critical path is sequential and can't be parallelized around: **generation finishes → verify counts → extraction runs → mentions populated in ClickHouse → the 4 query functions get verified against real data (incl. the scoring formula review promised to the user) → `createAgentStream()` + `chat.agent()` get built against verified data → end-to-end demo test → deploy → record video → submit.**
+
+But plenty of real work doesn't sit on that chain. Split below by who owns it per `CLAUDE.md`'s boundaries — reassigned slightly from the original split since the frontend is done and the backend surface has grown.
+
+### Person A (backend/data/agent) — do these now, don't wait for generation
+1. **Set up the Trigger.dev Cloud project** (account, `TRIGGER_PROJECT_REF`, `TRIGGER_SECRET_KEY` in `.env.local`). This is a dashboard/auth task — needs a human, an AI assistant can't do it. It unblocks two things at once: running `trigger/extract-mentions.ts` for real, and eventually deploying `chat.agent()`. Currently the single biggest blocker to finishing Phase A2 once mentions data exists.
+2. **Draft `docs/architecture.md`** with a Mermaid diagram — judges look at this for the OLTP+OLAP bonus prize (§8). This describes architecture that's *already built* (the Postgres/ClickHouse split, the extraction pipeline, the 4 query functions, the StreamEvent contract) — it needs zero live data, purely a writeup of what exists. High leverage, zero blocking dependency.
+3. **Scaffold `trigger/sync-oltp-to-olap.ts`** (Phase A4) — same pattern successfully used for extraction: write the sync logic (propagate `accounts.arr`/`deals` changes from Postgres → the denormalized `account_arr`/`account_segment` columns on ClickHouse `mentions`) as plain testable functions first, typecheck now, verify once mentions exist.
+4. **Sketch `trigger/agent.ts`'s structure** — the system prompt shape, the 4 tool registrations (referencing the now-built query functions), the hybrid-orchestration skeleton (scripted main flow / LLM-driven follow-ups, per the decision in §2). The exact chapter-by-chapter logic still needs real data to verify against, but the scaffolding doesn't.
+5. Once generation finishes (sequential from here): verify → run extraction → **review the scoring formula's actual output together** (this was explicitly promised, not a silent finalize) → finish `createAgentStream()` + `chat.agent()` → end-to-end test.
+
+### Person B (frontend/deploy/demo/submission) — do these now, fully independent of generation
+1. **Verify the live Vercel deployment actually works** end-to-end in mock mode — hasn't been re-confirmed since the frontend merged to `main`. Quick sanity check, catches any build/env surprise before it's a Tuesday-deploy-day problem.
+2. **Stress-test the 7 chart components against larger/edge-case data shapes than the hand-crafted mock uses** — e.g. `evidence-cards` with 20 quotes instead of 5, `opportunity-ranking` with all 8 themes at once, `volume-trap` with a different trap/gem distribution. Real data will look nothing like the mock's tidy hand-picked numbers; better to find a layout break now than during the live demo.
+3. **Draft the demo video shot list/script** against the current mock demo — it already reproduces all three wow-moments identically to what the live agent will show. Script now, re-record once the live agent is verified; doesn't need to wait.
+4. **Fix `README.md`** — currently 2 lines, effectively empty. A public hackathon repo needs a real one (what it is, how to run it, the architecture at a glance). Independent of everything else.
+5. **Polish `SUBMISSION.md`** — draft exists (tagline/summary/ClickHouse+Trigger paragraph). Flag which numbers are still mock-derived placeholders (e.g. "$9.6M ARR represented") vs. ones that need swapping for real output once the agent runs live.
+
+### Explicitly NOT yet safe to parallelize into
+Don't start `createAgentStream()`/`chat.agent()` chapter logic, and don't treat the scoring formula's `build_now`/`build_next`/`deprioritize` calls as final, until real `mentions` data has been run through them once. Building further on unverified numbers just compounds the risk if the formula needs tuning.
