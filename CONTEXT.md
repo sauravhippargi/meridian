@@ -42,10 +42,10 @@ The agent must correctly identify, from the seeded data:
 - **Trigger.dev `chat.agent()`** — REQUIRED by the hackathon. The agent orchestration must use this primitive, not a raw Next.js route or bare Vercel AI SDK. Background jobs (ingestion, extraction, sync) also run as Trigger.dev tasks with `batchTrigger` for fan-out.
 - **Orchestration decision: HYBRID** — scripted chapter sequence for the main "what should we prioritize?" flow (for demo reliability), LLM-driven for follow-up questions. LLM reasoning goes into synthesis WITHIN each chapter (verdict text, callouts), not the sequencing between chapters.
 
-### Frontend + streaming (Person B, DONE)
+### Frontend + streaming (Person B, DONE; live seam wired)
 - Next.js 14 App Router + TypeScript strict + Tailwind + Recharts + framer-motion.
 - The frontend consumes an **NDJSON stream of typed `StreamEvent`s** (defined in `types/chapter.ts`), NOT raw Trigger.dev tool-call events.
-- **The integration seam is one interface:** `createAgentStream(body: ChatRequest): AsyncGenerator<StreamEvent>`, stubbed at `lib/agent-stream.ts` (compiles, throws until Person A implements). Person A yields typed StreamEvents; Person B owns NDJSON encoding (`app/api/chat/ndjson.ts`) + route wiring (`route.ts`).
+- **The integration seam:** `createAgentStream(body: ChatRequest): AsyncGenerator<StreamEvent>` in `lib/agent-stream.ts` — **implemented** (Trigger `stream-meridian-answer` + in-process fallback). Person B owns NDJSON encoding (`app/api/chat/ndjson.ts`) + route wiring (`route.ts` branches on `NEXT_PUBLIC_AGENT_MODE`).
 - Reference for exact event ordering/pacing: `app/api/chat/mock/stream.ts` and `app/api/chat/mock/scenarios.ts`.
 
 ### LLM provider: Google Gemini (free tier)
@@ -82,51 +82,46 @@ Four are **pass-through** — their `data` is literally Person A's tool output f
 - `competitor_matrix` ← `GetCompetitivePositionOutput`
 - `impact_waterfall` ← `GetImpactProjectionOutput`
 
-Three are **frontend-shaped** — Person B built the transforms (`lib/queries/transforms.ts`: `toStatRow` / `toVolumeTrap` / `toTrendLines`). Person A must produce these aggregate input shapes for them:
-- `stat_row` ← needs `SignalSummary`
-- `volume_trap` ← needs `ThemeVolumeStat[]`
-- `trend_lines` ← needs `ThemeTrend[]`
-
-**ACTION:** Person A must define `SignalSummary`, `ThemeVolumeStat[]`, `ThemeTrend[]` types (or get exact shapes from Person B) and produce them from the query functions. Person B's transforms handle the trap/gem/emphasis classification from raw numbers — no re-hardcoding needed for real data.
+Three are **frontend-shaped** — transforms in `lib/queries/transforms.ts` (`toStatRow` / `toVolumeTrap` / `toTrendLines`). Aggregate inputs produced by `lib/queries/signal-summary.ts` (verified live):
+- `stat_row` ← `SignalSummary`
+- `volume_trap` ← `ThemeVolumeStat[]`
+- `trend_lines` ← `ThemeTrend[]`
 
 ---
 
-## 4. What is DONE
+## 4. What is DONE (verified)
 
-### Person A (backend) — Phase A1 code complete, committed, pushed
-All Phase A1 files written and typecheck clean. NOT YET RUN against live services (that's the immediate next step).
+### Live data (re-counted 2026-07-20 night)
+| Store | Metric | Count |
+| --- | --- | ---: |
+| Postgres | accounts | 123 |
+| Postgres | raw_tickets | 956 |
+| Postgres | raw_transcripts | 63 |
+| Postgres | deals (lost) | 14 (11) |
+| ClickHouse | mentions | **1,802** |
+| ClickHouse | dunning mentions | 582 |
 
-**Committed files:**
-- `CLAUDE.md` — project context (read it)
-- `types/` — `theme.ts`, `mention.ts`, `account.ts`, `agent-tools.ts`, `deal.ts`, `competitor.ts`, `raw-ticket.ts`, `raw-transcript.ts`
-- `lib/db/clickhouse.ts` — client with `query<T>()` (returns `{data, rows, elapsedMs}`), `insertBatch<T>()` (chunks at 1000), `ping()`, `ClickHouseError`
-- `lib/db/postgres.ts` — client with `query<T>()`, `queryOne<T>()`, `withTransaction()`, `ping()`, `PostgresError`, injection guard, `pg.types.setTypeParser(1700, parseFloat)` for NUMERIC→number
-- `lib/db/schema.postgres.sql` — accounts, deals, themes, competitors, raw_tickets, raw_transcripts. UUID PKs (uuid-ossp), updated_at triggers on mutable tables, enums for segment + theme category, FK cascade rules
-- `lib/db/schema.clickhouse.sql` — `mentions` (MergeTree, ORDER BY (theme_id, event_date), PARTITION BY toYYYYMM(event_date), skip index on account_id, account_segment as Enum8) + `theme_scores_daily` materialized view (SummingMergeTree)
-- `scripts/init-schema.ts` — idempotent schema applier (Postgres whole-file, ClickHouse statement-split). npm script: `db:init`
-- `scripts/generate-data.ts` + `scripts/seed/*` (artifacts.ts, generators.ts, llm.ts, load-seeds.ts, plan.ts) — LLM data generator. npm scripts: `seed:load`, `seed:dry`, `seed:generate`
+### Backend foundation (Phases A1–A5 code on `main`)
+- Schemas + clients (`lib/db/*`), seed generator (`scripts/seed/*`), seed JSON under `data/seed/`
+- Extraction pipeline + Trigger tasks (`lib/extraction/*`, `trigger/extract-mentions.ts`) — Trigger.dev SDK **v4.5.5**
+- Queries + scoring (`lib/queries/*`) — **`build_next` floor = 53** in `opportunity-scoring.ts`
+- Agent stream: `lib/agent-stream.ts` + `lib/agent/prioritize-flow.ts` + `trigger/agent.ts` (`chat.agent` `meridian-chat`) + `trigger/streams.ts`
+- A4: `trigger/sync-oltp-to-olap.ts` + `docs/architecture.md`
+- A5 materials: MIT `LICENSE`, rewritten `README.md`, `SUBMISSION.md` with real counts
+- E2E: `scripts/e2e-live-stream.ts` — 85 events / 6 chapters / three wow moments (passed)
 
-**Seed artifacts (committed, validated — all zod + cross-ref checks pass):**
-- `data/seed/accounts.json` — 123 accounts (13 enterprise, 30 mid_market, 80 SMB), ~$11M total ARR, ALL REAL company names (Notion, Vercel, Retool, Linear, Airtable, Zapier, Miro, etc.)
-- `data/seed/themes.json` — 8 themes with slugs (usage_based_billing, multi_entity_invoicing, dunning_customization, latam_tax, hybrid_revrec, webhook_reliability, salesforce_sync, custom_invoice_pdf)
-- `data/seed/competitors.json` — 8 rows (7 competitors + 1 Meridian self-row with is_self:true), 20 features each as 'full'|'partial'|'none'
-- `data/seed/opportunity-truth.json` — 8 truth themes with target_volume + 28 planted_accounts (4 blocked_deal roles: Retool→usage, Airtable→multi-entity, Attio→salesforce, Pilot→salesforce)
-
-**Generation sizing:** ~956 tickets + 63 transcripts + 14 deals ≈ 1,033 LLM calls. blocked_deal accounts each get a deal row + a sev-5 transcript.
-
-### Person B (frontend) — DONE
-- Full frontend built, runs in mock mode, `tsc` + `next build` green.
-- All 7 visual components built and rendering. Three wow moments work in mock.
-- `INTEGRATION.md` in repo (commit a57e091 on branch `claude/hackathon-chat-frontend-hpii18`) — sections 3/4/8 detail the streaming contract. READ IT.
-- Interface named: `createAgentStream(body): AsyncGenerator<StreamEvent>` stubbed at `lib/agent-stream.ts`.
-- Transforms done: `lib/queries/transforms.ts` (toStatRow/toVolumeTrap/toTrendLines).
-- Owns: route.ts wiring, NDJSON encoding, deployment dashboards (needs human auth — Saurav does this).
+### Frontend (Person B) — DONE
+- Full UI in mock mode; all 7 visuals; three wow moments in mock.
+- Live path ready: `route.ts` → `createAgentStream` when `NEXT_PUBLIC_AGENT_MODE=live` (still defaults to `mock`).
+- Transforms: `lib/queries/transforms.ts`.
 
 ### Environment (DONE)
-- `.env.local` created locally with: CLICKHOUSE_URL/USER/PASSWORD/DATABASE, POSTGRES_URL (ClickHouse-managed Postgres), GOOGLE_GENERATIVE_AI_API_KEY.
-- Env vars also mirrored into Vercel.
-- ClickHouse connectivity verified: `curl .../ping` returns `Ok.` from local machine.
-- **NOTE:** the generator/schema currently reference `OPENAI_API_KEY` in places — must be switched to Gemini (`@ai-sdk/google`, `GOOGLE_GENERATIVE_AI_API_KEY`) with lowered concurrency for the 15 RPM free-tier limit. This is the first code change needed.
+- `.env.local` has ClickHouse, Postgres (ClickHouse-managed), multi-provider LLM keys (`GEN_PROVIDER` / `EXTRACT_PROVIDER`).
+- Vercel env mirrored. ClickHouse ping OK.
+- Multi-provider generation/extraction wiring done (Anthropic used for full seed; Groq/others available).
+
+### Seed artifacts (committed)
+- 123 accounts / 8 themes / 8 competitors / opportunity-truth with planted blocked deals.
 
 ---
 
@@ -163,7 +158,7 @@ All Phase A1 files written and typecheck clean. NOT YET RUN against live service
 5. [x] **Full extraction + backfill run.** Smoke-tested one ticket/transcript/deal_loss via live worker → ClickHouse. First pass incomplete (TTL/queue); backfill recovered to **~97% source coverage**. Verified live: **1,802 mentions** in ClickHouse (956 tickets / 63 transcripts / 11 lost deals in Postgres). Expected ~5k was an overestimate — real docs yield fewer mentions/source.
 6. [x] Distribution spot-check: dunning highest raw count (~582); usage-based highest enterprise ARR + 6 deal losses; multi-entity low volume, high ARR, greenfield, 2 deal losses.
 
-### Phase A3 — Query functions + agent ✅ MOSTLY DONE
+### Phase A3 — Query functions + agent ✅ DONE
 1. Four query functions — **runtime-verified against live mentions**:
    - [x] `getCompetitivePosition` — greenfield multi-entity confirmed
    - [x] `getThemeEvidence` / `getImpactProjection` / `listOpportunitiesRanked` / `signal-summary` — verified via `scripts/verify-queries.ts`
@@ -195,14 +190,15 @@ All Phase A1 files written and typecheck clean. NOT YET RUN against live service
 5. [x] `docs/architecture.md` with Mermaid OLTP+OLAP diagram
 
 ### Phase A5 — Deploy + submit ⏳ PARTIAL
-1. [ ] `npx trigger.dev@4.5.5 deploy` — **FAILED** with `Failed to get deployment image ref` (retry needed from local/dashboard). Vercel env already mirrored.
+1. [ ] `npx trigger.dev@4.5.5 deploy` — **FAILED** with `Failed to get deployment image ref` (retry from local/dashboard still needed). Vercel env already mirrored.
 2. [x] `SUBMISSION.md` updated with real verified counts
 3. [ ] Demo video — **user records** (open on live product, max 5 min)
 4. [x] MIT `LICENSE`; `README.md` rewritten (was 2-line placeholder)
-5. [ ] Make repo public + submit form — user
-6. Flip `NEXT_PUBLIC_AGENT_MODE=live` for recording — user / deploy env
+5. [x] Repo is **public** on GitHub (`sauravhippargi/meridian`)
+6. [ ] Hackathon submission form — user
+7. [ ] Flip `NEXT_PUBLIC_AGENT_MODE=live` on Vercel + local for recording
 
-**Process rule (2026-07-21):** Keep updating this CONTEXT.md after each verified milestone and commit it with related work — do not let it drift.
+**Process rule (ongoing):** Keep updating this CONTEXT.md after each verified milestone and commit it with related work — do not let it drift.
 
 ---
 
@@ -231,39 +227,38 @@ Plus bonus category: best OLTP+OLAP integration (€1000).
 
 ---
 
-## 9. WHAT TO DO RIGHT NOW (updated 2026-07-21, night)
+## 9. WHAT'S LEFT (updated 2026-07-20 night — post verification)
 
-**Phases A1–A4 code + live extraction + agent E2E are done.** ClickHouse has **1,802 mentions**; scoring with **`build_next ≥53`** reproduces usage #1 / multi #2 gem / dunning volume-trap. Live chapter stream E2E passed.
+Phases A1–A4 + live extraction + agent E2E are **done**. Only submit/demo path remains.
 
-**Immediate remaining:**
-1. Retry `npx trigger.dev@4.5.5 deploy` (last attempt: `Failed to get deployment image ref`)
-2. Set `NEXT_PUBLIC_AGENT_MODE=live` on Vercel + local for demo
-3. User: record demo video, make repo public, submit form (morning July 23)
+### Must do before submit
+1. **Retry Trigger Cloud deploy** — `npx trigger.dev@4.5.5 deploy` last failed: `Failed to get deployment image ref`
+2. **Set `NEXT_PUBLIC_AGENT_MODE=live`** on Vercel + local (still `mock` by default / unset in `.env.local`)
+3. **Record demo video** — open on live product, ≤5 min, land three wow moments
+4. **Hackathon submission form** — morning July 23 preferred (deadline midnight AoE July 23)
 
-## 10. SINGLE-OWNER STATUS (updated 2026-07-21, night)
+### Optional / nice-to-have (not blocking demo narrative)
+- LATAM `watch` threshold — currently signal 23 → `deprioritize` (needs ≥35); only tune if you want narrative item #4 as `watch`
+- Optional live ingestion ticker, secondary agent tools, query optimization pass (A4 leftovers; queries already sub-second)
+- Stress-test chart components against fuller live shapes; demo shot list
 
-One owner (Sparsh) for remaining work. **Keep CONTEXT.md updated after every verified milestone** (process rule).
+Repo is already **public**. Do not change scoring code unless user asks.
 
-### Where things stand right now
-- Postgres: 956 tickets / 63 transcripts / 11 lost deals (14 deals total) — verified `SELECT count(*)`
-- ClickHouse: **1,802 mentions** (~97% source coverage after backfill)
-- Trigger.dev: **v4.5.5** (Cloud retired v3). Local worker `npx trigger.dev@4.5.5 dev` used for extraction. `trigger.config.ts` loads `.env.local` for `TRIGGER_PROJECT_REF`
-- Scoring decision: **`build_next` floor = 53** (user-approved 2026-07-21)
-- Agent: `createAgentStream` + `chat.agent(meridian-chat)` + `stream-meridian-answer` share `runAgentFlow`
-- A4: sync task + `docs/architecture.md` committed
-- A5: LICENSE, README, SUBMISSION.md done; **Trigger Cloud deploy blocked** on image-ref error; demo video + form = user
+## 10. SINGLE-OWNER STATUS (updated 2026-07-20 night)
 
-### Sequential plan — status
-1. [x] Trigger.dev Cloud keys + local worker (v4)
-2. [x] Extraction → ClickHouse mentions (1,802)
-3. [x] Query functions verified; scoring reviewed; build_next → 53
-4. [x] `createAgentStream` + `chat.agent`
-5. [x] E2E prioritize flow (script: `scripts/e2e-live-stream.ts`)
-6. [x] A4 sync + architecture.md (optional secondary tools / live ticker still open)
-7. [~] A5: materials done; deploy retry + video + submit remaining
+One owner (Sparsh). **Keep CONTEXT.md updated after every verified milestone** (process rule going forward).
+
+### Verified facts
+- Postgres: 123 accounts / 956 tickets / 63 transcripts / 14 deals (11 lost) — re-counted live
+- ClickHouse: **1,802 mentions** (dunning 582) — re-counted live; ~97% source coverage after backfill
+- Trigger.dev: **v4.5.5**; local `dev` worker used for extraction; Cloud **deploy still failing** on image-ref
+- Scoring: **`build_next ≥53`** (commit `fd71349`) — usage #1 build_now / multi #2 build_next / dunning deprioritize
+- Agent E2E passed (`scripts/e2e-live-stream.ts`); in-process path works even if Trigger stream deploy is down
+- A4 sync + architecture docs on main; A5 LICENSE/README/SUBMISSION on main
 
 ### Recent commits on main
 - `9ab9f37` — Trigger v4 + extraction smoke
 - `fd71349` — build_next ≥53 + agent stream
 - `9550c7d` — sync, architecture, LICENSE, SUBMISSION, E2E script
+- `b46430d` — CONTEXT.md A2–A5 progress sync
 
