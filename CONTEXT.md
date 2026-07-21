@@ -112,12 +112,13 @@ Three are **frontend-shaped** — transforms in `lib/queries/transforms.ts` (`to
 
 ### Frontend (Person B) — DONE
 - Full UI in mock mode; all 7 visuals; three wow moments in mock.
-- Live path ready: `route.ts` → `createAgentStream` when `NEXT_PUBLIC_AGENT_MODE=live` (still defaults to `mock`).
+- Live path ready: `route.ts` → `createAgentStream` when `NEXT_PUBLIC_AGENT_MODE=live` (defaults to `mock` if unset).
 - Transforms: `lib/queries/transforms.ts`.
 
-### Environment (DONE)
-- `.env.local` has ClickHouse, Postgres (ClickHouse-managed), multi-provider LLM keys (`GEN_PROVIDER` / `EXTRACT_PROVIDER`).
-- Vercel env mirrored. ClickHouse ping OK.
+### Environment (DONE locally; Vercel live flip = teammate)
+- `.env.local` has ClickHouse, Postgres (ClickHouse-managed), multi-provider LLM keys, and `NEXT_PUBLIC_AGENT_MODE=live` locally.
+- **Vercel is on the teammate's account** — they must set Production env vars + Redeploy (Sparsh cannot). ClickHouse ping OK from local.
+- Trigger Cloud env must also have DB + `ANTHROPIC_API_KEY` (Sparsh / Trigger dashboard).
 - Multi-provider generation/extraction wiring done (Anthropic used for full seed; Groq/others available).
 
 ### Seed artifacts (committed)
