@@ -1,8 +1,12 @@
-import { defineConfig } from '@trigger.dev/sdk/v3';
+import { config } from 'dotenv';
+import { resolve } from 'node:path';
+import { defineConfig } from '@trigger.dev/sdk';
 
-// Project ref comes from the Trigger.dev dashboard; set TRIGGER_PROJECT_REF in
-// .env.local (see .env.example). The placeholder keeps local dev/build working
-// before keys exist.
+// Config is evaluated before the CLI injects .env.local into process.env for
+// tasks — load it here so TRIGGER_PROJECT_REF resolves (otherwise we fall
+// through to proj_placeholder and get a 404).
+config({ path: resolve(process.cwd(), '.env.local') });
+
 export default defineConfig({
   project: process.env.TRIGGER_PROJECT_REF ?? 'proj_placeholder',
   dirs: ['./trigger'],

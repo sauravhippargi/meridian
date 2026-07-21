@@ -18,13 +18,20 @@ interface AccountJoin {
 
 const nowIso = (): string => new Date().toISOString();
 
+// pg returns timestamptz as Date objects; date columns may arrive as Date or
+// string depending on the driver/parser. Normalize to YYYY-MM-DD for ClickHouse.
+const toDateStr = (value: string | Date): string => {
+  if (value instanceof Date) return value.toISOString().slice(0, 10);
+  return String(value).slice(0, 10);
+};
+
 // ── tickets & transcripts: LLM extraction ────────────────────────────────────
 interface TicketJoinRow extends AccountJoin {
   id: string;
   external_id: string;
   subject: string;
   body: string;
-  opened_at: string;
+  opened_at: string | Date;
 }
 
 export const extractMentionsForTicket = async (
@@ -56,7 +63,7 @@ export const extractMentionsForTicket = async (
     char_offset_start: m.char_offset_start,
     char_offset_end: m.char_offset_end,
     extracted_at: nowIso(),
-    event_date: row.opened_at.slice(0, 10),
+    event_date: toDateStr(row.opened_at),
   }));
 };
 
@@ -64,7 +71,7 @@ interface TranscriptJoinRow extends AccountJoin {
   id: string;
   external_id: string;
   transcript: string;
-  interview_date: string;
+  interview_date: string | Date;
 }
 
 export const extractMentionsForTranscript = async (
@@ -95,7 +102,7 @@ export const extractMentionsForTranscript = async (
     char_offset_start: m.char_offset_start,
     char_offset_end: m.char_offset_end,
     extracted_at: nowIso(),
-    event_date: row.interview_date,
+    event_date: toDateStr(row.interview_date),
   }));
 };
 
@@ -107,7 +114,7 @@ interface DealJoinRow extends AccountJoin {
   id: string;
   blocking_theme_id: string;
   loss_reason: string;
-  close_date: string;
+  close_date: string | Date;
 }
 
 export const buildMentionForDealLoss = async (dealId: string): Promise<Mention> => {
@@ -135,7 +142,7 @@ export const buildMentionForDealLoss = async (dealId: string): Promise<Mention> 
     char_offset_start: 0,
     char_offset_end: snippet.length,
     extracted_at: nowIso(),
-    event_date: row.close_date,
+    event_date: toDateStr(row.close_date),
   };
 };
 
