@@ -155,47 +155,54 @@ All Phase A1 files written and typecheck clean. NOT YET RUN against live service
 - Random ticket sample reads realistically and on-theme (dunning/webhook tickets sampled, correct severity register).
 - Ticket count by account segment: 643 SMB / 229 mid-market / 84 enterprise — exactly the volume-trap shape the demo needs (lots of SMB noise, less enterprise signal, ARR-weighting will need to see through this at the ranking stage).
 
-### Phase A2 — Extraction pipeline ✅ CODE DONE, quality-gate PASSED, pending live end-to-end run
-1. [x] `lib/extraction/schema.ts` + `prompts.ts` + `model.ts` + `extract.ts` — closed-taxonomy Zod schema (dynamic from live theme ids), prompt requiring exact verbatim quotes, provider-agnostic model selection (`EXTRACT_PROVIDER`, defaults to Anthropic Haiku), and `extractMentions()` which computes char offsets by locating the LLM's snippet in the source text (never trusts LLM-reported offsets — they're routinely wrong).
-2. [x] **THE CRITICAL QUALITY GATE — PASSED, well above the 80% bar.** Tested against 4 REAL generated documents (from the seed:dry samples, spanning usage_based_billing/dunning/latam_tax) covering all 20 extracted mentions: **20/20 correct theme classification, 20/20 exact-match verbatim offsets**, theme-appropriate severity (dunning=3-4, usage/latam=5), and one genuinely nuanced sentiment catch (a conditional-positive line correctly scored +1 inside an otherwise negative transcript). Zero cross-theme bleed (a dunning ticket mentioning "templates/branding" wasn't miscategorized into invoice_pdf).
-3. [x] `lib/extraction/pipeline.ts` — the testable core logic: `extractMentionsForTicket`/`extractMentionsForTranscript` (LLM path, joins account arr/segment), `buildMentionForDealLoss` (**no LLM call** — a lost deal's `blocking_theme_id`+`loss_reason` already ARE the mention; severity is definitionally 5), `listPending*Ids()` enumerators. Typechecked; NOT yet runtime-tested (raw_tickets/deals are empty until Phase A1 step 4 persists — see above).
-4. [x] `trigger/extract-mentions.ts` — thin Trigger.dev `task()` wrapper: `extractMentionsForSource` (per-source unit, batchTrigger fan-out target, inserts directly to ClickHouse so 5,000 runs stay independent) + `extractAllMentions` (orchestrator: loads themes + all pending ids, batchTriggers). Typechecked against the v3 SDK shape from `trigger.config.ts`; **UNVERIFIED against a live Trigger.dev dev server** (`TRIGGER_PROJECT_REF`/`TRIGGER_SECRET_KEY` still placeholders) — smoke-test on one id before the full batchTrigger once `npx trigger.dev@latest dev` is running.
-5. [ ] Run full extraction → ~5,000 mentions. **BLOCKED on Phase A1 step 4 + Trigger.dev project keys.**
-6. [ ] Verify against ground truth: usage-billing highest enterprise-ARR weight, dunning highest raw count but low ARR, multi-entity few but high-ARR.
+### Phase A2 — Extraction pipeline ✅ DONE (live ClickHouse populated)
+1. [x] `lib/extraction/schema.ts` + `prompts.ts` + `model.ts` + `extract.ts` — closed-taxonomy Zod schema, verbatim-offset location, provider-agnostic (`EXTRACT_PROVIDER`, Groq supported).
+2. [x] **Quality gate PASSED** — 20/20 theme + offset accuracy on real samples.
+3. [x] `lib/extraction/pipeline.ts` — ticket/transcript LLM path + deterministic deal-loss mentions; pg `Date` coercion fixed.
+4. [x] `trigger/extract-mentions.ts` — upgraded to **Trigger.dev SDK v4.5.5** (`@trigger.dev/sdk`, not `/v3`). Queue concurrency + 1h TTL. Cloud retired v3.
+5. [x] **Full extraction + backfill run.** Smoke-tested one ticket/transcript/deal_loss via live worker → ClickHouse. First pass incomplete (TTL/queue); backfill recovered to **~97% source coverage**. Verified live: **1,802 mentions** in ClickHouse (956 tickets / 63 transcripts / 11 lost deals in Postgres). Expected ~5k was an overestimate — real docs yield fewer mentions/source.
+6. [x] Distribution spot-check: dunning highest raw count (~582); usage-based highest enterprise ARR + 6 deal losses; multi-entity low volume, high ARR, greenfield, 2 deal losses.
 
-### Phase A3 — Query functions + agent (~5-7 hrs, the core)
-1. Four query functions in `lib/queries/` returning `agent-tools.ts` shapes verbatim: `listOpportunitiesRanked`, `getThemeEvidence`, `getCompetitivePosition`, `getImpactProjection`.
-   - [x] **`getCompetitivePosition`** (`competitive-position.ts`) — DONE, tested against live Postgres. Pure Postgres, no ClickHouse dependency. Real finding while testing: only `'full'` support counts as "a competitor has this" (not `'partial'`) — seed data has Adyen/Zuora at `'partial'` for multi-entity invoicing, and counting that as "has it" would have suppressed the frontend's greenfield/Open status for wow-moment #2. Verified: usage_based_billing shows Metronome/Orb ahead; multi_entity_invoicing shows zero rivals — matches `opportunity-truth.json`'s "greenfield" claim exactly.
-   - [x] **`getThemeEvidence`** (`theme-evidence.ts`) — code done, typechecked. Two ClickHouse queries (capped severity-ranked evidence sample + uncapped per-account rollup — capping both would silently undercount "N accounts behind this theme"), one Postgres name lookup (account_name isn't denormalized onto mentions by design — this is the one place OLAP hands off to OLTP for "who"). **NOT YET runtime-verified** — needs live `mentions`.
-   - [x] **`getImpactProjection`** (`impact-projection.ts`) — code done, typechecked. Definitions (documented in-file, same "propose now / review real output later" pattern as the scoring formula): `unblock`=lost deals blocked by the theme (hardest evidence), `risk`=in-progress deals blocked by the theme, `expansion`=accounts with ≥2 mentions/avg severity≥3 and NO deal record (latent upsell, not yet a deal). `confidence` derives from which tiers have data. **NOT YET runtime-verified.**
-   - [x] **`listOpportunitiesRanked`** (`opportunities-ranked.ts` + `opportunity-scoring.ts`) — code done, typechecked. Split into pure scoring logic (unit-testable without a DB) and query orchestration.
-2. [x] The 3 aggregate shapes Person B's transforms need — `lib/queries/signal-summary.ts`: `getSignalSummary()`, `getThemeVolumeStats()`, `getThemeTrends()`. Return the transforms' *input* types (`SignalSummary`/`ThemeVolumeStat`/`ThemeTrend`, defined in `transforms.ts` itself, not `types/chapter.ts` — a real import mistake caught and fixed while building this). `getThemeTrends` deliberately does NOT set `emphasized` — that's `toTrendLines`' job (acceleration heuristic), not the query layer's. **NOT YET runtime-verified.**
-3. **THE SCORING FORMULA — implemented per user-approved design, PENDING REVIEW AGAINST REAL DATA (as agreed).** In `opportunity-scoring.ts`:
+### Phase A3 — Query functions + agent ✅ MOSTLY DONE
+1. Four query functions — **runtime-verified against live mentions**:
+   - [x] `getCompetitivePosition` — greenfield multi-entity confirmed
+   - [x] `getThemeEvidence` / `getImpactProjection` / `listOpportunitiesRanked` / `signal-summary` — verified via `scripts/verify-queries.ts`
+2. [x] Aggregate shapes for FE transforms — verified
+3. **SCORING FORMULA — REVIEWED ON LIVE DATA; USER DECISION APPLIED:**
    ```
    signal_strength = 0.35×norm(enterprise_arr_weighted) + 0.25×norm(deal_loss_count)
                     + 0.20×norm(avg_severity) + 0.15×norm(mention_count) + 0.05×norm(recency_weighted)
    ```
-   Min-max normalized 0-100 across the theme set. Deliberately does NOT weight raw mention_count heavily — that's the entire point of the volume-trap wow-moment. `recommendation` is a rule set on top (not a pure threshold): `build_now` requires signal≥70 AND a real lost-deal (hardest evidence); `build_next` requires signal≥55 AND (greenfield OR ≥3 enterprise accounts); `watch` requires signal≥35 AND rising recency share; else `deprioritize`. **USER: once Phase A2 extraction produces real mentions, I'll run this and show you the actual 8-theme ranked table (scores + recommendations) before treating it as final** — per your "propose now, review after" choice.
-4. [x] Competitor feature→theme mapping — `lib/queries/competitor-feature-map.ts`. Hand-mapped all 20 features across the 8 themes (verified: sums to 20, no gaps/overlaps).
-5. Implement `createAgentStream()` in `lib/agent-stream.ts` — the async generator yielding StreamEvents. Hybrid orchestration: scripted sequence for main flow. Honor per-chapter event order. **Not started** — the 4 query functions + 3 aggregate-shape functions it will call are now ready in code, but unverified against real data; building the stream generator before that verification risks compounding an unvalidated formula into the orchestration layer.
-6. Build `chat.agent()` in `trigger/agent.ts` — system prompt + register 4 tools + chapter orchestration. Stubs exist: statusEvent, visualEvent, encodeNdjson. **Not started.**
-7. Verify primary flow end-to-end: "what should we prioritize?" → all chapters stream → wow moments land. **Not started.**
+   Recommendation rules: `build_now` = signal≥70 AND lost-deal; **`build_next` = signal≥53** (was 55 — lowered 2026-07-21 so multi-entity at 53 gets build_next) AND (greenfield OR ≥3 enterprise); `watch` = signal≥35 AND rising recency; else `deprioritize`.
+   **Live ranked table (180d window, verified):**
+   | Rank | Theme | Signal | Reco |
+   | ---: | --- | ---: | --- |
+   | 1 | usage_based_billing | 89.6 | build_now |
+   | 2 | multi_entity_invoicing | 53 | build_next (greenfield) |
+   | 3 | webhook_reliability | 44 | watch |
+   | 4 | dunning_customization | 33.4 | deprioritize (582 mentions — volume trap) |
+   | 7 | latam_tax | 23 | deprioritize (not `watch` — signal <35; left untuned) |
+4. [x] Competitor feature→theme map
+5. [x] `createAgentStream()` + `lib/agent/prioritize-flow.ts` — hybrid scripted chapters; Trigger task `stream-meridian-answer` + in-process fallback
+6. [x] `chat.agent()` (`meridian-chat` in `trigger/agent.ts`) — scripted path + LLM+tools follow-ups
+7. [x] E2E: `scripts/e2e-live-stream.ts` — 85 events, 6 chapters, three wow moments (volume trap / hidden gem / evidence). Headline correct.
 
-**Verification debt (explicit, so nothing is silently assumed correct): `theme-evidence.ts`, `impact-projection.ts`, `opportunities-ranked.ts`, `signal-summary.ts`, and `extract-mentions.ts` (Trigger task) are all typechecked but NOT runtime-tested — every one of them queries the `mentions` ClickHouse table, which is empty until Phase A1 step 4 (generation) finishes AND Phase A2 step 5 (extraction) runs. `getCompetitivePosition` is the only query function verified against live data, because it's the only one with no `mentions` dependency.**
+### Phase A4 — OLTP+OLAP sync + docs ✅ CODE DONE
+1. [x] `trigger/sync-oltp-to-olap.ts` — task + hourly `schedules.task` propagates account ARR/segment Postgres→ClickHouse mutations
+2. [ ] Optional live ingestion ticker — not started
+3. [ ] Secondary tools — not started
+4. [ ] Query optimization pass — not started (queries already sub-second on 1.8k rows)
+5. [x] `docs/architecture.md` with Mermaid OLTP+OLAP diagram
 
-### Phase A4 — OLTP+OLAP sync + secondary tools (~3-4 hrs, bonus prize)
-1. `trigger/sync-oltp-to-olap.ts` — scheduled task, propagates changed account/deal fields Postgres→ClickHouse.
-2. Optional: simulated live ingestion task (adds a ticket every 10 min → shows real-time counter in demo).
-3. Secondary tools: get_theme_trend, compare_themes, get_account_history.
-4. Query optimization — target <500ms per query. Materialized views.
-5. `docs/architecture.md` with Mermaid diagram (judges look at this for the bonus).
+### Phase A5 — Deploy + submit ⏳ PARTIAL
+1. [ ] `npx trigger.dev@4.5.5 deploy` — **FAILED** with `Failed to get deployment image ref` (retry needed from local/dashboard). Vercel env already mirrored.
+2. [x] `SUBMISSION.md` updated with real verified counts
+3. [ ] Demo video — **user records** (open on live product, max 5 min)
+4. [x] MIT `LICENSE`; `README.md` rewritten (was 2-line placeholder)
+5. [ ] Make repo public + submit form — user
+6. Flip `NEXT_PUBLIC_AGENT_MODE=live` for recording — user / deploy env
 
-### Phase A5 — Deploy + submit (~2-3 hrs)
-1. Deploy frontend to Vercel (env vars already mirrored), agent+tasks to Trigger.dev Cloud (`npx trigger.dev deploy`).
-2. Submission materials (Person B drafting): 100-char title, 160-char tagline, 500-word summary, "how ClickHouse + Trigger.dev are used" paragraph.
-3. Record demo video (max 5 min, OPEN WITH LIVE PRODUCT per handbook — no intro card). Show main flow + wow moments + drill-in.
-4. Make repo public, add MIT LICENSE.
-5. SUBMIT EARLY — morning of July 23, not midnight AoE.
+**Process rule (2026-07-21):** Keep updating this CONTEXT.md after each verified milestone and commit it with related work — do not let it drift.
 
 ---
 
@@ -224,30 +231,39 @@ Plus bonus category: best OLTP+OLAP integration (€1000).
 
 ---
 
-## 9. WHAT TO DO RIGHT NOW (updated 2026-07-20, evening)
-**PHASE A1 IS FULLY COMPLETE as of this update.** `db:init`, `seed:load`, `seed:dry`, and `seed:generate` all done and verified against live Postgres (956 tickets / 63 transcripts / 14 deals, $1.22 total cost). See §5 for full detail, including the provider saga (Anthropic → xAI → Groq → back to Anthropic with a topped-up key) and the real spot-check results. All of Phase A2 (extraction) and all four Phase A3 query functions were also written and typechecked while generation was blocked on billing issues — see §5's "verification debt" note for what's typechecked-only vs. runtime-verified.
+## 9. WHAT TO DO RIGHT NOW (updated 2026-07-21, night)
 
-**Immediate next action:** Phase A2 — Trigger.dev Cloud project is set up and its key verified (see §10 item 1). Start a local worker (`npx trigger.dev@latest dev`) and run extraction to populate ClickHouse `mentions`.
+**Phases A1–A4 code + live extraction + agent E2E are done.** ClickHouse has **1,802 mentions**; scoring with **`build_next ≥53`** reproduces usage #1 / multi #2 gem / dunning volume-trap. Live chapter stream E2E passed.
 
-## 10. SINGLE-OWNER STATUS (updated 2026-07-20, night — Phase A1 complete)
+**Immediate remaining:**
+1. Retry `npx trigger.dev@4.5.5 deploy` (last attempt: `Failed to get deployment image ref`)
+2. Set `NEXT_PUBLIC_AGENT_MODE=live` on Vercel + local for demo
+3. User: record demo video, make repo public, submit form (morning July 23)
 
-**Ownership reality changed: as of this update, ONE person (Sparsh) is implementing the entire remaining project — frontend AND backend.** The original `CLAUDE.md` Person A / Person B split describes how the codebase got BUILT so far (accurate history, left as-is), but no longer describes who does what going forward. Treat every remaining task below as owned by whoever picks up this doc next, in the sequence given — there is no parallel track anymore, just a priority order.
+## 10. SINGLE-OWNER STATUS (updated 2026-07-21, night)
+
+One owner (Sparsh) for remaining work. **Keep CONTEXT.md updated after every verified milestone** (process rule).
 
 ### Where things stand right now
-- **Phase A1 is done and verified.** All raw data is really in Postgres (checked with a live `SELECT count(*)`, not just trusting a log line — a prior run's misleading exit-code capture is exactly why that habit matters now). See §5 for the full provider saga and spot-check results.
-- `.env.local`'s `GEN_PROVIDER` is `anthropic` (the working, topped-up key). Four other provider keys (xAI, Groq, Google, plus xAI/Groq/Cerebras SDK wiring) remain in `.env.local` and `scripts/seed/llm.ts` as fallbacks if ever needed for Phase A2 extraction (~5,000 calls, bigger than generation was) — Groq in particular is viable there since extraction's per-call token cost is much smaller than generation's, may fit under its 200K TPD cap where generation's ~395K didn't.
-- Everything written this session (extraction pipeline, all 4 query functions, competitor mapping, multi-provider LLM support) is committed to `main` on GitHub and does NOT depend on any particular session staying alive — safe to pick up from a fresh environment.
+- Postgres: 956 tickets / 63 transcripts / 11 lost deals (14 deals total) — verified `SELECT count(*)`
+- ClickHouse: **1,802 mentions** (~97% source coverage after backfill)
+- Trigger.dev: **v4.5.5** (Cloud retired v3). Local worker `npx trigger.dev@4.5.5 dev` used for extraction. `trigger.config.ts` loads `.env.local` for `TRIGGER_PROJECT_REF`
+- Scoring decision: **`build_next` floor = 53** (user-approved 2026-07-21)
+- Agent: `createAgentStream` + `chat.agent(meridian-chat)` + `stream-meridian-answer` share `runAgentFlow`
+- A4: sync task + `docs/architecture.md` committed
+- A5: LICENSE, README, SUBMISSION.md done; **Trigger Cloud deploy blocked** on image-ref error; demo video + form = user
 
-### The sequential plan from here
-1. [x] **Trigger.dev Cloud project set up.** `TRIGGER_PROJECT_REF`/`TRIGGER_SECRET_KEY` are in `.env.local`, validated against the real API (`POST /api/v1/tasks/{id}/trigger` returned `200` + a run id, not an auth error). No worker/dev-server is running yet, so that validation call sits as a queued (will-error, empty-payload) run in the dashboard — harmless, ignore it. **Next: run `npx trigger.dev@latest dev` to start a local worker, then trigger `extractAllMentions` for real.**
-2. **Run extraction** (`trigger/extract-mentions.ts` via `npx trigger.dev@latest dev`, or call `lib/extraction/pipeline.ts`'s functions directly from a script first to unblock faster if the Trigger.dev dev server setup is slow) → populates ClickHouse `mentions` (~5,000 rows expected).
-3. **Verify the 4 query functions against real data** — run `listOpportunitiesRanked`, `getThemeEvidence`, `getImpactProjection`, `getThemeVolumeStats`/`getSignalSummary`/`getThemeTrends` and actually look at the output. **The scoring formula (§5 Phase A3 item 3) was implemented but explicitly deferred for review against real numbers — do that review now**, before treating any `build_now`/`build_next`/`deprioritize` call as final. Check it reproduces the demo narrative (§1): usage-billing #1, multi-entity hidden gem, dunning correctly deprioritized despite volume.
-4. **Build `createAgentStream()`** (`lib/agent-stream.ts`) and **`chat.agent()`** (`trigger/agent.ts`) against the now-verified query functions. Hybrid orchestration per §2's decision (scripted main flow, LLM-driven follow-ups). Honor the per-chapter event order in §3.
-5. **End-to-end test**: ask "what should we prioritize next quarter?" against the live agent, confirm all chapters stream, all three wow-moments land, provenance drill-down works.
-6. **Phase A4** (bonus prize): `trigger/sync-oltp-to-olap.ts`, `docs/architecture.md` with a Mermaid diagram, query optimization pass.
-7. **Phase A5** (deploy + submit): re-verify Vercel deploy, `npx trigger.dev deploy`, flip `NEXT_PUBLIC_AGENT_MODE=live`, finalize `SUBMISSION.md` with real numbers, fix `README.md` (currently 2 lines), record the demo video (opens with live product, max 5 min), add MIT LICENSE, make repo public, submit early (morning of July 23, not midnight AoE).
+### Sequential plan — status
+1. [x] Trigger.dev Cloud keys + local worker (v4)
+2. [x] Extraction → ClickHouse mentions (1,802)
+3. [x] Query functions verified; scoring reviewed; build_next → 53
+4. [x] `createAgentStream` + `chat.agent`
+5. [x] E2E prioritize flow (script: `scripts/e2e-live-stream.ts`)
+6. [x] A4 sync + architecture.md (optional secondary tools / live ticker still open)
+7. [~] A5: materials done; deploy retry + video + submit remaining
 
-### Independent, do whenever convenient (no dependency on the sequence above)
-- Fix `README.md` — currently a 2-line placeholder.
-- Stress-test the 7 chart components against larger data shapes than the hand-crafted mock uses (e.g. `evidence-cards` with 20 quotes, `opportunity-ranking` with all 8 themes) — the mock's tidy hand-picked numbers won't match real output's shape/volume.
-- Draft the demo video shot list against the current mock — it already reproduces all three wow-moments; script now, re-record once live.
+### Recent commits on main
+- `9ab9f37` — Trigger v4 + extraction smoke
+- `fd71349` — build_next ≥53 + agent stream
+- `9550c7d` — sync, architecture, LICENSE, SUBMISSION, E2E script
+
